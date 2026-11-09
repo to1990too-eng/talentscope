@@ -28,7 +28,7 @@ class Evaluator:
     def __init__(
             self,
             redis_conn: redis.Redis | None = None,
-            anthropic_client: AsyncAnthropic | None = None
+            anthropic_client: AsyncAnthropic | None = None,
     ) -> None:
         self.settings = get_settings()
         self.redis = redis_conn or redis_client
@@ -82,7 +82,7 @@ class Evaluator:
             # Fallback: если LLM сломалась, ставим нейтральную оценку
             return EvaluationResult(
                 score=5.0,
-                reasoning="Ошибка автоматической оценки. Не удалось разобрать ответ AI."
+                reasoning="Ошибка автоматической оценки. Не удалось разобрать ответ AI.",
             )
 
     async def evaluate(self, query: str, candidate: RawCandidate) -> EvaluationResult:
@@ -107,10 +107,11 @@ class Evaluator:
                 model=self.settings.anthropic_model,
                 max_tokens=500,
                 temperature=0.0,
-                messages=[{"role": "user", "content": prompt}]
+                # ИСПРАВЛЕНИЕ: убираем лишний type: ignore, так как mypy доволен этим кодом
+                messages=[{"role": "user", "content": prompt}],
             )
 
-            # ИСПРАВЛЕНИЕ: используем getattr для безопасного извлечения текста
+            # Безопасное извлечение текста из ответа
             first_block = response.content[0]
             response_text = str(getattr(first_block, "text", ""))
 
@@ -118,17 +119,13 @@ class Evaluator:
             logger.error(f"Ошибка Claude API: {e}")
             return EvaluationResult(
                 score=5.0,
-                reasoning="Ошибка API Claude. Пожалуйста, проверьте логи."
+                reasoning="Ошибка API Claude. Пожалуйста, проверьте логи.",
             )
 
         # 3. Парсим ответ
         result = self._parse_llm_response(response_text)
 
         # 4. Сохраняем в кэш на 24 часа (86400 секунд)
-        await self.redis.set(
-            cache_key,
-            result.model_dump_json(),
-            ex=86400
-        )
+        await self.redis.set(cache_key, result.model_dump_json(), ex=86400)
 
         return result
