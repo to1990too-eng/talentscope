@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload  # Импорт для жадной загрузки связей
 
 from app.database import get_db_session
-from app.models.search import Search, SearchStatus, Evaluation
+from app.models.search import Evaluation, Search, SearchStatus
 from app.redis_client import redis_client
 from app.schemas.search import SearchCreate, SearchRead
 
