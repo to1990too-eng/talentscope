@@ -1,0 +1,48 @@
+name: TalentScope CI
+
+# Запускать workflow при каждом push в main и при создании Pull Request
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # Переменные окружения-заглушки.
+    # Тесты у нас замоканы, поэтому реальные подключения не нужны.
+    # Но pydantic-settings требует, чтобы эти переменные существовали при старте.
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: test_db
+      REDIS_HOST: localhost
+      ANTHROPIC_API_KEY: sk-ant-dummy-key-for-ci
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        # Кэшируем pip, чтобы зависимости устанавливались быстрее при повторных запусках
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Lint with ruff
+      run: ruff check .
+
+    - name: Type check with mypy
+      run: mypy app
+
+    - name: Run tests with pytest
+      run: pytest -v
