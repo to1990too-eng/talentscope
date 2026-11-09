@@ -7,9 +7,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload  # Импорт для жадной загрузки связей
 
 from app.database import get_db_session
-from app.models.search import Search, SearchStatus
+from app.models.search import Search, SearchStatus, Evaluation
 from app.redis_client import redis_client
 from app.schemas.search import SearchCreate, SearchRead
 
@@ -48,7 +49,17 @@ async def get_search_results(
         db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> Search:
     """Возвращает информацию о поиске и список оцененных кандидатов."""
-    stmt = select(Search).where(Search.id == search_id)
+
+    # ИСПРАВЛЕНИЕ: используем selectinload, чтобы сразу загрузить оценки и кандидатов.
+    # Это предотвращает ошибку MissingGreenlet при сериализации ответа.
+    stmt = (
+        select(Search)
+        .where(Search.id == search_id)
+        .options(
+            selectinload(Search.evaluations).selectinload(Evaluation.candidate)
+        )
+    )
+
     search = (await db.execute(stmt)).scalar_one_or_none()
 
     if not search:
