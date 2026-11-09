@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from app.config import get_settings
 from app.database import Base
+from app.models import Candidate, Evaluation, Search  # noqa: F401
 
 # Импортируем все модели (на шаге 3 добавим их сюда,
 # чтобы Alembic видел таблицы при автогенерации)
