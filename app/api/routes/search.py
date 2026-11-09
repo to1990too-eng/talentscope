@@ -1,37 +1,45 @@
 """Роутер для управления поисковыми запросами."""
 
+import json
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_search_service
 from app.database import get_db_session
-from app.models.search import Search
+from app.models.search import Search, SearchStatus
+from app.redis_client import redis_client
 from app.schemas.search import SearchCreate, SearchRead
-from app.services.search_service import SearchService
 
 router = APIRouter(prefix="/search", tags=["Search"])
+
+QUEUE_NAME = "search_queue"
 
 
 @router.post("", response_model=dict, status_code=status.HTTP_202_ACCEPTED)
 async def create_search(
         payload: SearchCreate,
-        background_tasks: BackgroundTasks,
-        service: Annotated[SearchService, Depends(get_search_service)],
+        db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> dict[str, str]:
     """
-    Запускает поиск в фоновом режиме.
-    Возвращает сообщение о том, что поиск начат.
+    Создает запись о поиске и отправляет задачу в очередь Redis.
     """
-    # Запускаем долгий процесс в фоне, чтобы не блокировать HTTP-ответ
-    # В реальном проекте здесь лучше использовать Celery или ARQ, но FastAPI BackgroundTasks
-    # отлично подходит для MVP.
-    background_tasks.add_task(service.execute_search, payload.query)
+    # 1. Создаем запись в БД со статусом PENDING
+    search = Search(query=payload.query, status=SearchStatus.PENDING)
+    db.add(search)
+    await db.commit()
+    await db.refresh(search)
 
-    return {"message": "Search started in background"}
+    # 2. Отправляем задачу в очередь Redis (LPUSH кладет элемент в начало списка)
+    task_payload = json.dumps({"search_id": str(search.id), "query": search.query})
+    await redis_client.lpush(QUEUE_NAME, task_payload)
+
+    return {
+        "message": "Search started in background",
+        "search_id": str(search.id)
+    }
 
 
 @router.get("/{search_id}", response_model=SearchRead)

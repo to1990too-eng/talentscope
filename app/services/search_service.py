@@ -35,16 +35,32 @@ class SearchService:
         self.sources = sources
         self.evaluator = evaluator
 
-    async def execute_search(self, query: str, limit_per_source: int = 5) -> UUID:
+    async def execute_search(
+            self,
+            query: str,
+            search_id: UUID | None = None,
+            limit_per_source: int = 5
+    ) -> UUID:
         """
         Выполняет полный цикл поиска и сохраняет результаты.
 
-        :return: UUID созданного поискового запроса.
+        :param query: Поисковый запрос.
+        :param search_id: Если передан (из воркера), обновляет существующую запись.
+        :param limit_per_source: Максимум результатов с одного источника.
+        :return: UUID созданного (или обновленного) поискового запроса.
         """
-        # 1. Создаем запись о поиске в статусе PROCESSING
-        search = Search(query=query, status=SearchStatus.PROCESSING)
-        self.db.add(search)
-        await self.db.flush()  # Получаем UUID для search.id
+        # 1. Получаем существующую запись из БД (если работаем из воркера) или создаем новую
+        if search_id:
+            search = await self.db.get(Search, search_id)
+            if not search:
+                raise ValueError(f"Search {search_id} not found")
+            search.status = SearchStatus.PROCESSING
+        else:
+            search = Search(query=query, status=SearchStatus.PROCESSING)
+            self.db.add(search)
+
+        # Фиксируем изменения в сессии, чтобы у search точно был ID (если он только что создан)
+        await self.db.flush()
 
         try:
             # 2. Параллельно опрашиваем все источники через asyncio.gather
@@ -112,7 +128,7 @@ class SearchService:
             logger.exception(f"Критическая ошибка при выполнении поиска {search.id}: {e}")
             await self.db.rollback()
 
-            # ИСПРАВЛЕНИЕ: используем новую переменную failed_search, чтобы не ломать типизацию
+            # Используем новую переменную failed_search, чтобы не ломать типизацию mypy
             failed_search = await self.db.get(Search, search.id)
             if failed_search:
                 failed_search.status = SearchStatus.FAILED
