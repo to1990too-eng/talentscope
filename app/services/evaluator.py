@@ -4,10 +4,9 @@ import hashlib
 import json
 import logging
 import re
-
-import redis.asyncio as redis
-from anthropic import AnthropicError, AsyncAnthropic
 from pydantic import BaseModel, Field, ValidationError
+from anthropic import AsyncAnthropic, AnthropicError
+import redis.asyncio as redis
 
 from app.config import get_settings
 from app.redis_client import redis_client
@@ -41,7 +40,6 @@ class Evaluator:
 
     def _get_cache_key(self, query: str, external_id: str) -> str:
         """Генерирует уникальный ключ для кэша Redis."""
-        # Используем MD5 от запроса, чтобы ключ не был слишком длинным
         query_hash = hashlib.md5(query.encode("utf-8")).hexdigest()
         return f"eval:{query_hash}:{external_id}"
 
@@ -71,7 +69,6 @@ class Evaluator:
         """Извлекает JSON из ответа LLM и валидирует его. Содержит fallback."""
         try:
             # Иногда LLM оборачивает JSON в markdown-блоки (```json ... ```)
-            # Эта регулярка вытаскивает содержимое фигурных скобок
             json_match = re.search(r"\{.*\}", response_text, re.DOTALL)
             if not json_match:
                 raise ValueError("В ответе LLM не найден JSON")
@@ -108,11 +105,14 @@ class Evaluator:
             response = await self.anthropic.messages.create(
                 model=self.settings.anthropic_model,
                 max_tokens=500,
-                temperature=0.0,  # 0.0 для максимальной детерминированности
+                temperature=0.0,
                 messages=[{"role": "user", "content": prompt}]
             )
-            # Извлекаем текст из ответа (в Anthropic SDK 1.x это список блоков)
-            response_text = response.content[0].text  # type: ignore
+
+            # ИСПРАВЛЕНИЕ: используем getattr для безопасного извлечения текста
+            first_block = response.content[0]
+            response_text = str(getattr(first_block, "text", ""))
+
         except AnthropicError as e:
             logger.error(f"Ошибка Claude API: {e}")
             return EvaluationResult(
