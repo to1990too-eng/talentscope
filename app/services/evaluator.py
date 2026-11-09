@@ -4,9 +4,11 @@ import hashlib
 import json
 import logging
 import re
+from typing import cast
 
 import redis.asyncio as redis
 from anthropic import AnthropicError, AsyncAnthropic
+from anthropic.types import MessageParam
 from pydantic import BaseModel, Field, ValidationError
 
 from app.config import get_settings
@@ -103,12 +105,16 @@ class Evaluator:
         prompt = self._build_prompt(query, candidate)
 
         try:
+            # ИСПРАВЛЕНИЕ: используем cast, чтобы mypy принял словарь как MessageParam
+            messages = cast(
+                list[MessageParam],
+                [{"role": "user", "content": prompt}],
+            )
+
             response = await self.anthropic.messages.create(
                 model=self.settings.anthropic_model,
                 max_tokens=500,
-                temperature=0.0,
-                # ИСПРАВЛЕНИЕ: убираем лишний type: ignore, так как mypy доволен этим кодом
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
             )
 
             # Безопасное извлечение текста из ответа
