@@ -1,8 +1,36 @@
-# TalentScope
+# TalentScope 🎯
 
-[![TalentScope CI](https://github.com/ТВОЙ_НИКНЕЙМ/talentscope/actions/workflows/ci.yml/badge.svg)](https://github.com/ТВОЙ_НИКНЕЙМ/talentscope/actions/workflows/ci.yml)
+[![TalentScope CI](https://github.com/to1990too-eng/talentscope/actions/workflows/ci.yml/badge.svg)](https://github.com/to1990too-eng/talentscope/actions/workflows/ci.yml)
 
-AI-агент для поиска и оценки специалистов в открытых источниках
-(GitHub, arXiv, OpenAlex) с выгрузкой в Excel.
+**TalentScope** — это AI-агент для поиска и оценки IT-специалистов в открытых источниках (GitHub, arXiv, OpenAlex) с возможностью выгрузки результатов в Excel. 
 
-> 🚧 Проект в активной разработке. Документация появится к релизу.
+Проект создан как pet-проект для портфолио, демонстрирующий навыки проектирования асинхронных бэкенд-систем, работы с LLM и контейнеризации.
+
+## 🛠 Стек технологий и обоснование
+
+- **Python 3.11** и **FastAPI**: Высокая скорость разработки, встроенная валидация Pydantic и автоматическая Swagger-документация.
+- **PostgreSQL + SQLAlchemy 2.0 (async)**: Надежное реляционное хранилище с полной асинхронностью и строгой типизацией.
+- **Redis**: Используется для двух целей: как брокер очередей (для фонового воркера) и как кэш (для ответов LLM).
+- **Claude API (Anthropic)**: Оценка релевантности кандидатов с помощью языковой модели.
+- **Docker & Docker Compose**: Обеспечивает изолированную среду, единую для разработки и деплоя.
+- **Pytest, Ruff, Mypy**: Полное покрытие тестами (с моками) и строгий контроль качества кода на уровне CI.
+
+## 🏗 Архитектура
+
+```text
+[ Клиент ] 
+    │ 
+    ▼ (HTTP / JSON)
+[ FastAPI App ] ───(1. Создает задачу)───► [ PostgreSQL ]
+    │                                          ▲
+    │ (2. Отправляет ID в очередь)             │ (6. Сохраняет результаты)
+    ▼                                          │
+[ Redis Queue ]                                │
+    │                                          │
+    │ (3. Воркер забирает задачу)              │
+    ▼                                          │
+[ Background Worker ]                          │
+    │                                          │
+    ├──► (4. Сбор данных) ──► [ GitHub API, arXiv, OpenAlex ]
+    │                                          │
+    └──► (5. Оценка) ───────► [ Claude API ] ──┘
