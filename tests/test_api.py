@@ -1,6 +1,6 @@
 """Интеграционные тесты для API."""
 
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -8,8 +8,8 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from app.main import app
 from app.database import get_db_session
+from app.main import app
 from app.models.search import Search
 
 
